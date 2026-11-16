@@ -8,6 +8,9 @@
 <meta name="apple-mobile-web-app-title" content="FIFA07">
 <meta name="theme-color" content="#0a0a0a">
 <title>FIFA07 · Pachangas Jerez</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" type="image/png" href="icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Anton&family=Archivo:wght@400;500;600;700;800&family=Barlow+Condensed:wght@600;700&display=swap" rel="stylesheet">
@@ -243,6 +246,11 @@ td.pts{font-family:'Anton';font-size:18px}
 #sv:disabled,#ok:disabled{opacity:.85;color:transparent!important;position:relative}
 #sv:disabled::after,#ok:disabled::after{content:'Guardando…';position:absolute;inset:0;display:grid;place-items:center;color:#fff;font-weight:800}
 .adminbar{scroll-margin-top:90px;display:flex;align-items:center;gap:10px;margin-top:14px;padding:12px 14px;border-radius:var(--r);background:#fff;color:#0a0a0a;width:100%;text-align:left}
+.gate{text-align:center;padding:40px 4px 20px}
+.gate .gs{font-size:11px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:var(--mut);margin-top:6px}
+.gcard{margin-top:28px;background:var(--s1);border:1px solid var(--line);border-radius:22px;padding:22px 18px}
+.steps{margin:0 0 0 20px;line-height:1.55}.steps li{margin:8px 0}
+.kbd{display:inline-block;background:var(--s2);border:1px solid var(--line2);border-radius:6px;padding:0 6px}
 .credit{text-align:center;margin:36px 0 10px;padding:22px 16px;border-top:1px solid var(--line);font-size:14px}
 .previa{margin-top:14px;border-radius:18px;padding:14px;background:linear-gradient(160deg,#1a0002,#0f0f0f 70%);border:1px solid rgba(227,6,19,.4)}
 .pv-h{display:flex;justify-content:space-between;align-items:center;font-size:11px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--red2)}
@@ -460,7 +468,7 @@ const galaOn=()=>!!S.config?.app?.gala; // la Gala está oculta hasta que un adm
 /* ============ ESTADO ============ */
 const S={tab:'partidos',month:ym(new Date()),season:null,players:{},matches:{},signups:{},votes:{},voted:{},galaVotes:{},galaVoted:{},config:{},polls:{},pollVotes:{},feedback:{},ready:{},sheet:null};
 let store=null,me=null,storeErr=false;
-try{S.kitPromoHidden=!!localStorage.getItem('fifa07_kithide')}catch(e){}
+try{S.kitPromoHidden=!!localStorage.getItem('fifa07_kithide');S.instHidden=!!localStorage.getItem('fifa07_insthide')}catch(e){}
 try{me=localStorage.getItem('fifa07_me')}catch(e){}
 const $=s=>document.querySelector(s);
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -470,7 +478,11 @@ const pname=id=>P(id)?.name||'¿?';
 const pemo=id=>P(id)?.emoji||'⚽';
 const okPhoto=ph=>typeof ph==='string'&&/^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/.test(ph);
 const face=id=>{const ph=P(id)?.photo;return okPhoto(ph)?`<img class="ph" src="${ph}" alt="">`:esc(pemo(id))};
-const isAdmin=()=>!!(me&&P(me)?.admin);
+const isAdmin=()=>!!(me&&P(me)?.admin&&P(me)?.status!=='pending');
+const isPending=id=>P(id)?.status==='pending';
+const approvedIds=()=>Object.keys(S.players).filter(id=>!isPending(id));
+const randPin=()=>String(Math.floor(Math.random()*10000)).padStart(4,'0');
+const appUrl=()=>location.href.split('#')[0];
 function ym(d){return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`}
 function ymd(d){return `${ym(d)}-${String(d.getDate()).padStart(2,'0')}`}
 function setMe(id){me=id;try{id?localStorage.setItem('fifa07_me',id):localStorage.removeItem('fifa07_me')}catch(e){};renderMe();render()}
@@ -533,7 +545,7 @@ function computeLevels(){
 function computeStats(flt){
   const LVL=computeLevels();
   const st={};
-  for(const id in S.players){const p=S.players[id];st[id]={pj:0,v:0,e:0,d:0,g:0,a:0,aw:{crack:0,dandy:0,duro:0,vaya:0},rs:[],pts:0,y:p.yellow||0,r:p.red||0,hist:[],lv0:+p.level0||2,kitN:0,hasKit:!!p.kit}}
+  for(const id in S.players){const p=S.players[id];if(p.status==='pending')continue;st[id]={pj:0,v:0,e:0,d:0,g:0,a:0,aw:{crack:0,dandy:0,duro:0,vaya:0},rs:[],pts:0,y:p.yellow||0,r:p.red||0,hist:[],lv0:+p.level0||2,kitN:0,hasKit:!!p.kit}}
   const played=Object.values(S.matches).filter(m=>m.status==='played'&&(!flt||flt(m))).sort((a,b)=>mdt(a)-mdt(b));
   for(const m of played){
     const aw=matchAwards(m);
@@ -598,6 +610,9 @@ function render(){
   const main=$('#main');
   if(storeErr){main.innerHTML=`<div class="empty" style="margin-top:30px"><div class="big">📡</div><b>No se puede conectar con la base de datos.</b><p style="margin-top:6px">Revisa tu conexión y vuelve a abrir la app.</p></div>`;return}
   if(!S.ready.players||!S.ready.matches){main.innerHTML=`<div class="loading"><div class="ball">⚽</div><p>Calentando en la banda…</p></div>`;return}
+  const nav=document.querySelector('nav.tabs');
+  if(needsGate()){nav.style.display='none';main.innerHTML=gateView();return}
+  nav.style.display='';
   if(S.season==null)S.season=seasonOfDate(new Date());
   S._inf=informSet();
   const st=computeStats();
@@ -624,6 +639,9 @@ function viewMatches(st){
   const played=all.filter(m=>m.status==='played').sort((a,b)=>mdt(b)-mdt(a));
   let h='';
   if(S.conn&&!S.conn.ok)h+=`<div class="banner" style="border-color:#ffd400;background:rgba(255,212,0,.1)"><span class="e">⚠️</span><span><b>Sin conexión con la base de datos</b><br><span class="small">${S.conn.code==='reglas'?'Las reglas de Firebase no dejan leer ni escribir. Revisa la pestaña Seguridad.':`Lo que hagas no se guardará (${esc(S.conn.code)}). Recarga en un rato.`}</span></span></div>`;
+  const npend=Object.values(S.players).filter(p=>p.status==='pending').length;
+  if(isAdmin()&&npend)h+=`<button class="banner" style="width:100%;text-align:left" data-act="goAdmin"><span class="e">🙋</span><span><b>${npend} ${npend===1?'persona quiere':'personas quieren'} entrar</b><br>Toca para aprobar o rechazar.</span></button>`;
+  if(!isStandalone()&&!S.instHidden&&store?.mode!=='demo')h+=`<div class="banner" style="background:var(--s1);border-color:var(--line2)"><span class="e">📲</span><span class="sp"><b>Instálala en tu móvil</b><br><span class="small muted">Para tenerla como una app más.</span></span><button class="btn sm wht" data-act="install">Cómo</button><button class="x" data-act="instHide" style="width:28px;height:28px;font-size:14px">✕</button></div>`;
   if(isAdmin())h+=`<button class="adminbar" data-act="goAdmin"><span style="font-size:22px">⚙️</span><span class="sp"><b>Eres admin</b><br><span class="small" style="opacity:.7">Panel: Gala, equipación, buzón y gestión</span></span><span>›</span></button>`;
   if(store?.mode==='demo')h+=`<div class="demo"><span>🧪 <b>Modo demo:</b> datos de prueba, solo en este móvil.</span><button class="btn sm" data-act="resetDemo">Reiniciar</button></div>`;
   if(me&&P(me)){
@@ -833,9 +851,9 @@ function futCard(id,st,big=false,opt={}){
     <div class="st">${attrs(s).map(([k,v])=>`<div><b>${v}</b>${k}</div>`).join('')}</div>${opt.extra||''}</button>`;
 }
 function viewSquad(st){
-  const ids=Object.keys(S.players).sort((a,b)=>st[b].ovr-st[a].ovr||pname(a).localeCompare(pname(b)));
+  const ids=approvedIds().sort((a,b)=>st[b].ovr-st[a].ovr||pname(a).localeCompare(pname(b)));
   let h=`<h2>Jugadores <span class="sub">${ids.length} en el grupo</span></h2>`;
-  h+=`<button class="btn pri full" data-act="newPlayer" style="margin-bottom:16px">＋ Fichar jugador</button>`;
+  if(isAdmin())h+=`<button class="btn pri full" data-act="newPlayer" style="margin-bottom:16px">＋ Fichar e invitar a un jugador</button>`;
   if(!ids.length)h+=`<div class="empty"><div class="big">🃏</div>Todavía no hay jugadores.</div>`;
   h+=`<div class="cards">${ids.map(id=>futCard(id,st)).join('')}</div>`;
   h+=`<p class="muted small" style="margin-top:16px;line-height:1.5">Carta <b style="color:var(--red2)">roja</b> ≥ 80 · <b style="color:#fff">blanca</b> ≥ 70 · <b>negra</b> el resto. La media sale del nivel ⚡ (que sube ganando y baja perdiendo) más goles, premios y victorias. CRK cracks · DAN dandys · DUR duros · GOL goles · VIC % victorias · FIA fiabilidad.</p>`;
@@ -844,8 +862,10 @@ function viewSquad(st){
 
 /* ---- Info ---- */
 function viewInfo(){
-  let h=kitOn()?kitSection():'';
+  let h=`<button class="banner" style="width:100%;text-align:left;background:var(--s1);border-color:var(--line2)" data-act="install"><span class="e">📲</span><span class="sp"><b>Instalar la app</b><br><span class="small muted">Instrucciones para iPhone y Android</span></span><span>›</span></button>`;
+  h+=kitOn()?kitSection():'';
   h+=`<h2>Normas</h2><div class="box"><ul class="rules">
+    <li><b>Grupo privado:</b> se entra con aprobación del admin o con invitación. No pases el enlace sin hablarlo.</li>
     <li>Cada uno se apunta <b>a sí mismo</b>. Si te apuntas, <b>vienes</b>.</li>
     <li>Bajarse con <b>menos de 24h</b>: 🟨 automática. Si reincides: 🟥.</li>
     <li>Los primeros en apuntarse juegan; el resto va a <b>reserva</b> y sube solo si alguien se baja.</li>
@@ -894,31 +914,33 @@ function pinPrompt(title,sub,cb){
 }
 
 function pickMe(){
-  const ids=Object.keys(S.players).sort((a,b)=>pname(a).localeCompare(pname(b)));
-  modal(`${mh('¿Quién eres?')}<p class="muted small" style="margin-bottom:12px">Elige tu jugador. Se recuerda en este móvil.</p>
+  if(needsGate()){loginForm();return}
+  const ids=approvedIds().sort((a,b)=>pname(a).localeCompare(pname(b)));
+  modal(`${mh('¿Quién eres?')}<p class="muted small" style="margin-bottom:12px">Para cambiar de jugador en este móvil hace falta su PIN.</p>
     <input id="q" placeholder="Buscar…" style="margin-bottom:6px">
-    <div>${ids.map(id=>`<button class="pl" data-pick="${esc(id)}"><span class="av">${face(id)}</span><span class="nm">${esc(pname(id))}</span>${id===me?'<span class="pill red">Tú</span>':P(id).pinHash?'<span class="muted">🔒</span>':''}</button>`).join('')||'<div class="empty">Aún no hay jugadores.</div>'}</div>
-    <button class="btn pri full" id="np" style="margin-top:16px">＋ Soy nuevo, crear mi jugador</button>
-    ${me?'<button class="btn ghost full" id="out" style="margin-top:8px">Cerrar sesión en este móvil</button>':''}`,
+    <div>${ids.map(id=>`<button class="pl" data-pick="${esc(id)}"><span class="av">${face(id)}</span><span class="nm">${esc(pname(id))}</span>${id===me?'<span class="pill red">Tú</span>':'<span class="muted">🔒</span>'}</button>`).join('')}</div>
+    <button class="btn ghost full" id="out" style="margin-top:14px">Cerrar sesión en este móvil</button>`,
   md=>{
-    md.querySelectorAll('[data-pick]').forEach(b=>b.onclick=()=>{
-      const id=b.dataset.pick,p=P(id);
-      if(id===me){close();return}
-      if(p.pinHash)pinPrompt(`Hola, ${esc(p.name)}`,'Mete tu PIN de 4 cifras.',async v=>{if(await hashPin(v)===p.pinHash){setMe(id);close();toast(`¡Hola, ${p.name}! 👋`)}else return false});
-      else{setMe(id);close();toast(`¡Hola, ${p.name}! Ponte un PIN en tu perfil 🔒`)}
-    });
+    md.querySelectorAll('[data-pick]').forEach(b=>b.onclick=()=>{const id=b.dataset.pick;if(id===me){close();return}loginAs(id)});
     md.querySelector('#q').oninput=e=>{const q=e.target.value.toLowerCase();md.querySelectorAll('[data-pick]').forEach(b=>b.style.display=b.textContent.toLowerCase().includes(q)?'':'none')};
-    md.querySelector('#np').onclick=()=>playerForm(null,true);
-    const out=md.querySelector('#out');if(out)out.onclick=()=>{setMe(null);close()};
+    md.querySelector('#out').onclick=()=>{setMe(null);close()};
   });
+}
+function loginAs(id){
+  const p=P(id);if(!p)return;
+  if(!p.pinHash){modal(`${mh('Falta el PIN')}<p class="muted">${esc(p.name)} todavía no tiene PIN. Pídeselo al admin: desde su perfil puede generarte uno.</p>`);return}
+  pinPrompt(`Hola, ${esc(p.name)}`,'Mete tu PIN de 4 cifras.',async v=>{if(await hashPin(v)===p.pinHash){setMe(id);close();toast(`¡Hola, ${p.name}! 👋`)}else return false});
 }
 
 function playerForm(id,asMe){
   const p=id?P(id):{name:'',pos:'TODO',emoji:EMOJIS[Math.floor(Math.random()*EMOJIS.length)]};
   let emo=p.emoji,pos=p.pos||'TODO',lv=Math.round(+p.level0||2),photo=okPhoto(p.photo)?p.photo:null;
   const needPin=asMe||(id&&id===me);
-  modal(`${mh(id?'Editar jugador':asMe?'Crea tu jugador':'Fichar a otro')}
-    ${!id&&!asMe?'<p class="muted small">Para alguien que aún no tiene la app. Cuando entre, podrá elegirse y ponerse su PIN.</p>':''}
+  const firstEver=!id&&!Object.keys(S.players).length;
+  modal(`${mh(id?'Editar jugador':asMe?(firstEver?'Crea el grupo':'Pide entrar'):'Fichar a otro')}
+    ${!id&&!asMe?'<p class="muted small">Para alguien que aún no tiene la app. Se le genera un PIN y te preparo el mensaje de invitación para mandárselo.</p>':''}
+    ${!id&&asMe&&!firstEver?'<p class="muted small">El grupo es privado: el admin tendrá que aprobar tu solicitud antes de que puedas entrar.</p>':''}
+    ${firstEver?'<p class="muted small">Eres el primero: serás el admin del grupo.</p>':''}
     <label>Foto</label><div class="photo-edit"><div class="big" id="phv">${photo?`<img src="${photo}" alt="">`:esc(emo)}</div>
       <div><label class="btn sm" style="margin:0;display:inline-flex;text-transform:none;letter-spacing:0;font-size:13px;color:var(--txt)">📷 ${photo?'Cambiar':'Subir foto'}<input type="file" accept="image/*" id="phf" style="display:none"></label>
       <button class="btn sm ghost" id="phx" style="margin-top:6px;${photo?'':'display:none'}">Quitar foto</button>
@@ -929,7 +951,7 @@ function playerForm(id,asMe){
     <p class="muted small" style="margin-top:6px">Es orientativo: luego sube si ganas partidos y baja si pierdes.</p>
     <label>${photo?'Emoji (si quitas la foto)':'O un emoji'}</label><div class="emojis" id="em">${EMOJIS.map(e=>`<button class="${e===emo?'on':''}" data-v="${e}">${e}</button>`).join('')}</div>
     ${needPin?`<label>${id&&p.pinHash?'Cambiar PIN (déjalo vacío para no tocarlo)':'PIN de 4 cifras'}</label><input id="pin" inputmode="numeric" pattern="[0-9]*" maxlength="4" placeholder="••••" style="letter-spacing:.4em;font-family:Anton;font-size:22px"><p class="muted small" style="margin-top:6px">Para que nadie vote o se baje en tu nombre.</p>`:''}
-    <button class="btn pri full" id="sv" style="margin-top:20px">${id?'Guardar':'Fichar'}</button>`,
+    <button class="btn pri full" id="sv" style="margin-top:20px">${id?'Guardar':asMe?(firstEver?'Crear el grupo':'Enviar solicitud'):'Fichar e invitar'}</button>`,
   md=>{
     const grp=(sel,set)=>md.querySelectorAll(sel+' .opt, '+sel+' button').forEach(b=>b.onclick=()=>{set(b.dataset.v);md.querySelectorAll(sel+' .opt, '+sel+' button').forEach(x=>x.classList.toggle('on',x===b))});
     grp('#pos',v=>pos=v);grp('#em',v=>{emo=v;if(!photo)md.querySelector('#phv').textContent=v});
@@ -946,11 +968,12 @@ function playerForm(id,asMe){
       e.target.disabled=true;
       try{
         const upd={name,pos,emoji:emo,level0:lv,photo:photo||null};if(pin)upd.pinHash=await hashPin(pin);
-        if(id)await store.doc('players/'+id).update(upd);
-        else{const nidv=nid();const first=!Object.keys(S.players).length&&(store.mode==='demo'||S.conn?.ok);
-          await store.doc('players/'+nidv).set({...upd,yellow:0,red:0,cardLog:[],admin:first,createdAt:Date.now()});
-          if(asMe)setMe(nidv)}
-        close();toast(id?'Guardado':'¡Fichaje cerrado! 🖊️');
+        if(id){await store.doc('players/'+id).update(upd);close();toast('Guardado');return}
+        const nidv=nid();const first=!Object.keys(S.players).length&&(store.mode==='demo'||S.conn?.ok);
+        let invitePin=null;if(!asMe){invitePin=randPin();upd.pinHash=await hashPin(invitePin)}
+        await store.doc('players/'+nidv).set({...upd,yellow:0,red:0,cardLog:[],admin:first,status:(first||!asMe)?'approved':'pending',createdAt:Date.now()});
+        if(asMe){setMe(nidv);close();toast(first?'¡Grupo creado! Eres el admin 👑':'Solicitud enviada ⏳')}
+        else{close();showInvite(name,invitePin)}
       }catch(x){e.target.disabled=false;err(x)}
     };
   });
@@ -1025,15 +1048,15 @@ function leave(mid){
 }
 function addOther(mid){
   const inM=new Set(signupsOf(mid).map(s=>s.pid));
-  const ids=Object.keys(S.players).filter(i=>!inM.has(i)).sort((a,b)=>pname(a).localeCompare(pname(b)));
+  const ids=approvedIds().filter(i=>!inM.has(i)).sort((a,b)=>pname(a).localeCompare(pname(b)));
   modal(`${mh('Apuntar a otro')}<p class="muted small" style="margin-bottom:10px">Para el que no tiene la app a mano. Lo apuntas tú, se compromete él.</p>
   <input id="q" placeholder="Buscar…" style="margin-bottom:6px">
   ${ids.map(id=>`<button class="pl" data-pick="${esc(id)}"><span class="av">${face(id)}</span><span class="nm">${esc(pname(id))}</span><span class="muted">＋</span></button>`).join('')||'<div class="empty">Ya están todos.</div>'}
-  <button class="btn full" id="np" style="margin-top:14px">＋ Fichar jugador nuevo</button>`,
+  ${isAdmin()?'<button class="btn full" id="np" style="margin-top:14px">＋ Fichar e invitar a uno nuevo</button>':''}`,
   md=>{
     md.querySelector('#q').oninput=e=>{const q=e.target.value.toLowerCase();md.querySelectorAll('[data-pick]').forEach(b=>b.style.display=b.textContent.toLowerCase().includes(q)?'':'none')};
     md.querySelectorAll('[data-pick]').forEach(b=>b.onclick=async()=>{b.disabled=true;b.style.opacity=.35;await join(mid,b.dataset.pick)});
-    md.querySelector('#np').onclick=()=>playerForm(null,false);
+    const np=md.querySelector('#np');if(np)np.onclick=()=>playerForm(null,false);
   });
 }
 async function makeTeams(mid,shuffle){
@@ -1187,16 +1210,16 @@ function profile(id){
       ${isAdmin()&&(s.y||s.r)?`<button class="btn sm" id="unc">Quitar última tarjeta</button>`:''}
       ${isAdmin()&&id!==me?`<button class="btn sm" id="adm">${p.admin?'Quitar admin':'Hacer admin'}</button>`:''}
       ${isAdmin()&&id!==me?`<button class="btn sm dan" id="del">Borrar</button>`:''}
-      ${isAdmin()&&p.pinHash&&id!==me?`<button class="btn sm" id="rpin">Resetear PIN</button>`:''}
+      ${isAdmin()&&id!==me?`<button class="btn sm" id="rpin">${p.pinHash?'Nuevo PIN':'Generar PIN'}</button>`:''}
     </div>`,
   md=>{
     const q=x=>md.querySelector(x);
-    q('#isme')&&(q('#isme').onclick=()=>{close();if(p.pinHash)pinPrompt(`Hola, ${esc(p.name)}`,'Mete tu PIN de 4 cifras.',async v=>{if(await hashPin(v)===p.pinHash){setMe(id);close();toast(`¡Hola, ${p.name}! 👋`)}else return false});else{setMe(id);toast(`¡Hola, ${p.name}! Ponte un PIN 🔒`)}});
+    q('#isme')&&(q('#isme').onclick=()=>{close();loginAs(id)});
     q('#ed')&&(q('#ed').onclick=()=>playerForm(id));
     q('#unc')&&(q('#unc').onclick=async()=>{const log=[...(p.cardLog||[])];const last=log.pop();const t=last?.type||(p.red?'red':'yellow');
       try{await store.doc('players/'+id).update(t==='red'?{red:Math.max(0,(p.red||0)-1),cardLog:log}:{yellow:Math.max(0,(p.yellow||0)-1),cardLog:log});close();toast('Tarjeta perdonada 🙏')}catch(e){err(e)}});
     q('#adm')&&(q('#adm').onclick=async()=>{try{await store.doc('players/'+id).update({admin:!p.admin});close();toast(p.admin?'Ya no es admin':'Ahora es admin')}catch(e){err(e)}});
-    q('#rpin')&&(q('#rpin').onclick=async()=>{try{await store.doc('players/'+id).update({pinHash:null});close();toast('PIN borrado: que se ponga uno nuevo')}catch(e){err(e)}});
+    q('#rpin')&&(q('#rpin').onclick=async()=>{const np=randPin();try{await store.doc('players/'+id).update({pinHash:await hashPin(np)});close();showInvite(p.name,np,true)}catch(e){err(e)}});
     q('#del')&&(q('#del').onclick=()=>confirmBox('Borrar jugador',`¿Seguro que quieres borrar a <b>${esc(p.name)}</b>?`,'Borrar',async()=>{await store.doc('players/'+id).delete()},true));
   });
 }
@@ -1749,15 +1772,97 @@ async function imgWrapped(pid){
   return c;
 }
 
+/* ============ ACCESO PRIVADO ============ */
+function needsGate(){
+  if(!S.ready.players)return false;
+  if(!me||!P(me))return true;
+  return isPending(me);
+}
+function gateView(){
+  const empty=!Object.keys(S.players).length;
+  let h=`<div class="gate"><div class="logo" style="font-size:46px">${esc(APP_NAME[0])}<b>${esc(APP_NAME[1])}</b></div><div class="gs">${esc(SLOGAN)}</div>`;
+  if(S.conn&&!S.conn.ok)h+=`<div class="banner" style="border-color:#ffd400;background:rgba(255,212,0,.1);text-align:left"><span class="e">⚠️</span><span><b>Sin conexión con la base de datos</b><br><span class="small">${esc(S.conn.code)}</span></span></div>`;
+  if(me&&isPending(me)){
+    const adm=Object.values(S.players).filter(p=>p.admin).map(p=>p.name)[0]||'el admin';
+    h+=`<div class="gcard"><div style="font-size:44px">⏳</div><h2 style="justify-content:center;margin:8px 0 4px">Solicitud enviada</h2>
+      <p class="muted">Hola, <b style="color:var(--txt)">${esc(pname(me))}</b>. El grupo es privado: <b style="color:var(--txt)">${esc(adm)}</b> tiene que aprobarte. En cuanto lo haga, esta pantalla se abrirá sola.</p>
+      <button class="btn pri full" style="margin-top:16px" data-act="pendCopy">📋 Copiar aviso para ${esc(adm)}</button>
+      <button class="btn ghost full" style="margin-top:8px" data-act="pendCancel">Cancelar solicitud</button></div>`;
+  }else if(empty){
+    h+=`<div class="gcard"><div style="font-size:44px">⚽</div><h2 style="justify-content:center;margin:8px 0 4px">Crea el grupo</h2><p class="muted">Todavía no hay nadie. Crea tu jugador y serás el admin: tú decides quién entra.</p>
+      <button class="btn pri full" style="margin-top:16px" data-act="gateJoin">Crear mi jugador</button></div>`;
+  }else{
+    h+=`<div class="gcard"><div style="font-size:40px">🔒</div><h2 style="justify-content:center;margin:8px 0 4px">Grupo privado</h2><p class="muted">Solo pueden entrar los jugadores aprobados por el admin.</p>
+      <button class="btn wht full" style="margin-top:16px" data-act="gateLogin">🔑 Ya soy del grupo</button>
+      <button class="btn pri full" style="margin-top:10px" data-act="gateJoin">🙋 Quiero entrar</button></div>`;
+  }
+  h+=`<button class="btn ghost sm" style="margin-top:18px" data-act="install">📲 Cómo instalar la app</button>
+    <div class="small muted" style="margin-top:22px">Un proyecto creado por <b style="color:var(--txt)">${esc(CREATOR)}</b></div></div>`;
+  return h;
+}
+function loginForm(){
+  modal(`${mh('Entrar')}<p class="muted small">Escribe tu nombre o mote tal y como está en el grupo y tu PIN.</p>
+    <label>Nombre</label><input id="ln" autocomplete="off" autocapitalize="words" placeholder="Tu nombre o mote"><div id="sug"></div>
+    <label>PIN</label><input id="lp" inputmode="numeric" pattern="[0-9]*" maxlength="4" placeholder="••••" style="letter-spacing:.4em;font-family:Anton;font-size:22px">
+    <p class="small" id="lerr" style="color:var(--red2);min-height:18px;margin-top:8px"></p>
+    <button class="btn pri full" id="sv" style="margin-top:6px">Entrar</button>
+    <p class="muted small" style="margin-top:12px">¿No tienes PIN o lo has olvidado? Pídeselo al admin.</p>`,
+  md=>{
+    const ln=md.querySelector('#ln'),lp=md.querySelector('#lp'),er=md.querySelector('#lerr');setTimeout(()=>ln.focus(),60);
+    ln.oninput=()=>{const q=ln.value.trim().toLowerCase();const s=q.length<2?[]:Object.values(S.players).filter(p=>p.name.toLowerCase().startsWith(q)).slice(0,4);
+      md.querySelector('#sug').innerHTML=s.map(p=>`<button class="opt" style="margin:6px 6px 0 0" data-n="${esc(p.name)}">${esc(p.name)}</button>`).join('');
+      md.querySelectorAll('[data-n]').forEach(b=>b.onclick=()=>{ln.value=b.dataset.n;md.querySelector('#sug').innerHTML='';lp.focus()})};
+    md.querySelector('#sv').onclick=async e=>{
+      er.textContent='';const n=ln.value.trim().toLowerCase(),pin=lp.value.trim();
+      const p=Object.values(S.players).find(x=>x.name.toLowerCase()===n);
+      if(!p){er.textContent='No encuentro ese nombre en el grupo.';return}
+      if(!p.pinHash){er.textContent='Ese jugador no tiene PIN todavía. Pídeselo al admin.';return}
+      if(!/^\d{4}$/.test(pin)){er.textContent='El PIN son 4 números.';return}
+      if(await hashPin(pin)!==p.pinHash){er.textContent='PIN incorrecto.';lp.value='';return}
+      setMe(p.id);close();toast(isPending(p.id)?'Tu solicitud sigue pendiente ⏳':`¡Hola, ${p.name}! 👋`);
+    };
+  });
+}
+function showInvite(name,pin,reset){
+  const t=reset?`🔑 ${name}, tu nuevo PIN de ${APP_NAME.join('')} es *${pin}*.\nEntra en ${appUrl()} → "Ya soy del grupo" → nombre: ${name} · PIN: ${pin}`
+    :`⚽ ¡${name}, ya estás dentro de *${APP_NAME.join('')}*!\n\n👉 ${appUrl()}\n\n1️⃣ Pulsa "Ya soy del grupo"\n2️⃣ Nombre: *${name}*\n3️⃣ PIN: *${pin}* (luego lo puedes cambiar en tu perfil)\n\nEs un grupo privado, no pases el enlace sin hablar con el admin 🤫`;
+  modal(`${mh(reset?'Nuevo PIN':'Invitación lista')}<p class="muted small">${reset?'Mándale su nuevo PIN.':'Ya está en el grupo. Mándale este mensaje por privado:'}</p>
+    <div class="fact" style="margin-top:12px"><span>PIN de ${esc(name)}</span><b style="font-size:40px;letter-spacing:.2em">${esc(pin)}</b></div>
+    <textarea rows="7" readonly style="margin-top:12px">${esc(t)}</textarea>
+    <button class="btn pri full" id="cp" style="margin-top:10px">📋 Copiar mensaje</button>`,
+  md=>md.querySelector('#cp').onclick=()=>copyText(t,'Copiado. Pégaselo por WhatsApp 📲',md.querySelector('textarea')));
+}
+
+/* ============ INSTALAR ============ */
+const isStandalone=()=>window.matchMedia?.('(display-mode: standalone)').matches||navigator.standalone===true;
+const platform=()=>/android/i.test(navigator.userAgent)?'android':/iphone|ipad|ipod/i.test(navigator.userAgent)?'ios':'other';
+window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();S.bip=e;});
+function installModal(tab){
+  tab=tab||(platform()==='android'?'android':'ios');
+  const ios=`<ol class="steps"><li>Abre el enlace en <b>Safari</b> (no desde dentro de WhatsApp: toca los tres puntos o "Abrir en Safari").</li><li>Toca el botón <b>Compartir</b> <span class="kbd">⬆️</span> de la barra de abajo.</li><li>Baja y elige <b>"Añadir a pantalla de inicio"</b>.</li><li>Pulsa <b>Añadir</b>. Te aparecerá el icono de ${esc(APP_NAME.join(''))} como una app más.</li></ol>`;
+  const and=`${S.bip?'<button class="btn pri full" id="bip" style="margin-bottom:12px">📲 Instalar ahora</button>':''}<ol class="steps"><li>Abre el enlace en <b>Chrome</b>.</li><li>Toca el menú <span class="kbd">⋮</span> de arriba a la derecha.</li><li>Elige <b>"Instalar aplicación"</b> o <b>"Añadir a pantalla de inicio"</b>.</li><li>Confirma con <b>Instalar</b>. Saldrá en tu pantalla y en el cajón de apps.</li></ol>`;
+  modal(`${mh('Instalar la app')}<p class="muted small">No está en App Store ni en Google Play: es una app web. Se instala desde el navegador en 10 segundos, ocupa casi nada y se actualiza sola.</p>
+    <div class="seg"><button class="${tab==='ios'?'on':''}" data-t="ios">🍎 iPhone</button><button class="${tab==='android'?'on':''}" data-t="android">🤖 Android</button></div>
+    <div style="margin-top:14px">${tab==='ios'?ios:and}</div>
+    <p class="muted small" style="margin-top:10px">También puedes usarla sin instalar, simplemente abriendo el enlace.</p>`,
+  md=>{md.querySelectorAll('[data-t]').forEach(b=>b.onclick=()=>installModal(b.dataset.t));
+    const bi=md.querySelector('#bip');if(bi)bi.onclick=async()=>{S.bip.prompt();try{await S.bip.userChoice}catch(e){}S.bip=null;close()}});
+}
+
 /* ============ ADMIN ============ */
 function adminSection(){
   const row=(e,t,d,on,act)=>`<div class="row" style="padding:10px 0;border-bottom:1px solid var(--line)"><span class="sp"><b>${e} ${t}</b><br><span class="small muted">${d}</span></span><button class="tog ${on?'on':''}" data-act="${act}">${on?'Activada':'Oculta'}</button></div>`;
-  const nfb=Object.keys(S.feedback).length;const admins=Object.values(S.players).filter(p=>p.admin).map(p=>p.name);
-  return `<h2 id="admin" style="scroll-margin-top:90px">Panel de admin</h2><div class="box" style="padding:6px 16px 14px">
+  const nfb=Object.keys(S.feedback).length;const admins=Object.values(S.players).filter(p=>p.admin&&p.status!=='pending').map(p=>p.name);
+  const pend=Object.values(S.players).filter(p=>p.status==='pending').sort((a,b)=>(a.createdAt||0)-(b.createdAt||0));
+  return `<h2 id="admin" style="scroll-margin-top:90px">Panel de admin</h2>
+    <div class="box" style="margin-bottom:10px"><b>🙋 Solicitudes para entrar · ${pend.length}</b>
+    ${pend.map(p=>`<div class="pay"><span class="av">${face(p.id)}</span><span class="nm">${esc(p.name)}<br><span class="small muted" style="font-weight:500">${esc(POS[p.pos]||'')} · ${'★'.repeat(+p.level0||2)}</span></span><button class="tog on" data-act="approve" data-id="${esc(p.id)}">Aprobar</button><button class="tog" data-act="reject" data-id="${esc(p.id)}">✕</button></div>`).join('')||'<p class="small muted" style="margin-top:6px">Ninguna pendiente. Para meter a alguien directamente: Jugadores → "Fichar e invitar".</p>'}</div>
+    <div class="box" style="padding:6px 16px 14px">
     ${row('🏆','Gala de la temporada','Premios de la temporada y votación del Balón de Oro y el de Plomo.',galaOn(),'galaToggle')}
     ${row('👕','Equipación oficial','Diseño de las camisetas, pedido conjunto, dorsales y +1 por venir equipado.',kitOn(),'kitToggle')}
     <div style="padding-top:12px" class="small muted">
-      <p>👥 <b style="color:var(--txt)">Admins:</b> ${admins.map(esc).join(', ')||'—'}</p>
+      <p>🔒 <b style="color:var(--txt)">Grupo privado:</b> nadie entra sin tu aprobación o sin una invitación con PIN.</p>
+      <p style="margin-top:6px">👥 <b style="color:var(--txt)">Admins:</b> ${admins.map(esc).join(', ')||'—'}</p>
       <p style="margin-top:6px">🃏 Toca a cualquier jugador para <b style="color:var(--txt)">nombrarlo admin, quitar tarjetas, resetear su PIN o borrarlo</b>.</p>
       <p style="margin-top:6px">🗑 En la ficha de cualquier partido puedes <b style="color:var(--txt)">borrarlo o editarlo</b>.</p>
       <p style="margin-top:6px">💬 Buzón beta: <b style="color:var(--txt)">${nfb} ${nfb===1?'sugerencia':'sugerencias'}</b> (más abajo).</p>
@@ -1857,7 +1962,7 @@ document.addEventListener('click',e=>{
     case'copy':copyList(id);break;
     case'delMatch':confirmBox('Borrar partido','Se borra la convocatoria y su resultado.','Borrar',async()=>{await store.doc('matches/'+id).delete();for(const s of signupsOf(id))await store.doc(`signups/${s.mid}__${s.pid}`).delete()},true);break;
     case'profile':profile(id);break;
-    case'newPlayer':playerForm(null,!me);break;
+    case'newPlayer':if(isAdmin())playerForm(null,false);break;
     case'share':shareImage(a.dataset.kind,id);break;
     case'season':S.season+= +a.dataset.d;render();break;
     case'galaVote':galaVoteForm();break;
@@ -1872,6 +1977,14 @@ document.addEventListener('click',e=>{
     case'pollClose':confirmBox('Cerrar encuesta','Desaparecerá de la portada.','Cerrar',async()=>{await store.doc('polls/'+id).update({closed:true})});break;
     case'cal':calModal(id);break;
     case'wrapped':openWrapped(id,a.closest('.md')?seasonOfDate(new Date()):S.season);break;
+    case'gateLogin':loginForm();break;
+    case'gateJoin':playerForm(null,true);break;
+    case'pendCancel':confirmBox('Cancelar solicitud','Se borra tu solicitud para entrar.','Cancelar solicitud',async()=>{await store.doc('players/'+me).delete();setMe(null)},true);break;
+    case'pendCopy':{const adm=Object.values(S.players).filter(p=>p.admin).map(p=>p.name)[0]||'';copyText(`Hola ${adm}, he pedido entrar en ${APP_NAME.join('')} como "${pname(me)}". ¿Me apruebas? 🙏`,'Copiado. Mándaselo por WhatsApp 📲');break}
+    case'approve':store.doc('players/'+id).update({status:'approved'}).then(()=>toast(`${pname(id)} ya está dentro ✅`)).catch(err);break;
+    case'reject':confirmBox('Rechazar solicitud',`Se borra la solicitud de <b>${esc(pname(id))}</b>.`,'Rechazar',async()=>{await store.doc('players/'+id).delete()},true);break;
+    case'install':installModal();break;
+    case'instHide':S.instHidden=true;try{localStorage.setItem('fifa07_insthide','1')}catch(e){};render();break;
     case'goAdmin':S.tab='info';render();setTimeout(()=>document.getElementById('admin')?.scrollIntoView({behavior:'smooth'}),50);break;
     case'galaToggle':confirmBox(galaOn()?'Ocultar la Gala':'Activar la Gala',galaOn()?'La pestaña Gala dejará de verse para el grupo. Los votos se guardan.':'Todo el grupo verá la pestaña Gala en Ranking y podrá votar el Balón de Oro y el de Plomo.',galaOn()?'Ocultar':'🏆 Activar',async()=>{await store.doc('config/app').set({...(S.config.app||{}),gala:!galaOn()})});break;
     case'kitToggle':confirmBox(kitOn()?'Ocultar equipación':'Activar equipación',kitOn()?'Dejará de verse para todo el grupo. Los pedidos y dorsales se guardan.':'Todo el grupo verá el diseño de las camisetas, el pedido conjunto y el +1 punto por venir equipado.',kitOn()?'Ocultar':'👕 Activar',async()=>{await store.doc('config/app').set({...(S.config.app||{}),kit:!kitOn()})});break;
