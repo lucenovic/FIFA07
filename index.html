@@ -240,6 +240,9 @@ td.pts{font-family:'Anton';font-size:18px}
 .hero .t{font-size:12px;color:var(--mut)}
 .stars{color:var(--red2);letter-spacing:1px}
 .beta{display:inline-block;vertical-align:top;margin:4px 0 0 6px;font-family:'Archivo';font-size:9px;font-weight:800;letter-spacing:.12em;background:var(--red);color:#fff;padding:2px 6px;border-radius:6px}
+#sv:disabled,#ok:disabled{opacity:.85;color:transparent!important;position:relative}
+#sv:disabled::after,#ok:disabled::after{content:'Guardando…';position:absolute;inset:0;display:grid;place-items:center;color:#fff;font-weight:800}
+.adminbar{scroll-margin-top:90px;display:flex;align-items:center;gap:10px;margin-top:14px;padding:12px 14px;border-radius:var(--r);background:#fff;color:#0a0a0a;width:100%;text-align:left}
 .credit{text-align:center;margin:36px 0 10px;padding:22px 16px;border-top:1px solid var(--line);font-size:14px}
 .previa{margin-top:14px;border-radius:18px;padding:14px;background:linear-gradient(160deg,#1a0002,#0f0f0f 70%);border:1px solid rgba(227,6,19,.4)}
 .pv-h{display:flex;justify-content:space-between;align-items:center;font-size:11px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--red2)}
@@ -420,6 +423,7 @@ const FIREBASE_CONFIG = {
   messagingSenderId: "495674924122",
   appId: "1:495674924122:web:17deb31c95f341903a0c63"
 };
+const FIREBASE_DB = null;               // nombre de la base de datos si no es la de por defecto (p. ej. 'default')
 const APP_NAME = ['FIFA','07'];          // nombre del grupo: [parte blanca, parte roja]
 const SLOGAN = 'Para los amantes del mal fútbol';
 const CREATOR = 'Daniel Lucena';
@@ -450,7 +454,8 @@ const LEVELS={1:'Paquete integral',2:'Me defiendo',3:'Normalito',4:'Apañado',5:
 const LV={K:0.15,K_NEW:0.28,NEW_MATCHES:5,SCALE:1.5,MARGIN:0.12,STARS_PULL:0.08,MIN:1,MAX:5,FULL:10};
 const TEAM={A:{n:'Blancos',c:'w'},B:{n:'Negros',c:'b'}};
 const SIZES=['XS','S','M','L','XL','XXL','3XL'];
-const kitOn=()=>!!S.config?.app?.kit; // la equipación está oculta hasta que un admin la active
+const kitOn=()=>!!S.config?.app?.kit;
+const galaOn=()=>!!S.config?.app?.gala; // la Gala está oculta hasta que un admin la active // la equipación está oculta hasta que un admin la active
 
 /* ============ ESTADO ============ */
 const S={tab:'partidos',month:ym(new Date()),season:null,players:{},matches:{},signups:{},votes:{},voted:{},galaVotes:{},galaVoted:{},config:{},polls:{},pollVotes:{},feedback:{},ready:{},sheet:null};
@@ -470,7 +475,8 @@ function ym(d){return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0
 function ymd(d){return `${ym(d)}-${String(d.getDate()).padStart(2,'0')}`}
 function setMe(id){me=id;try{id?localStorage.setItem('fifa07_me',id):localStorage.removeItem('fifa07_me')}catch(e){};renderMe();render()}
 function toast(t){document.querySelectorAll('.toast').forEach(x=>x.remove());const d=document.createElement('div');d.className='toast';d.textContent=t;document.body.appendChild(d);setTimeout(()=>d.remove(),2800)}
-function err(e){console.error(e);toast('Algo ha fallado. Prueba otra vez.')}
+function err(e){console.error(e);const c=e?.code||'';
+  toast(c==='timeout'?'❌ No se ha guardado: el servidor no responde. Revisa la conexión.':c==='permission-denied'?'❌ No se ha guardado: las reglas de Firebase no lo permiten.':`❌ No se ha guardado (${c||e?.message||'error'}). Prueba otra vez.`)}
 async function hashPin(pin){
   try{const b=await crypto.subtle.digest('SHA-256',new TextEncoder().encode('fifa07:'+pin));return [...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,'0')).join('')}
   catch(e){let h=0;for(const c of 'fifa07:'+pin)h=(h*31+c.charCodeAt(0))|0;return 'x'+h}
@@ -585,7 +591,7 @@ const cardsHtml=(y,r)=>(!y&&!r)?'':`<span class="cardsY">${'<i class="cy"></i>'.
 /* ============ RENDER ============ */
 function renderMe(){
   const b=$('#meBtn');
-  b.innerHTML=me&&P(me)?`<div class="av">${face(me)}</div><span>${esc(pname(me))}</span>`:`<div class="av">👤</div><span>¿Quién eres?</span>`;
+  b.innerHTML=me&&P(me)?`<div class="av">${face(me)}</div><span>${esc(pname(me))}</span>${P(me).admin?'<span class="pill red" style="padding:2px 6px;font-size:9px">ADMIN</span>':''}`:`<div class="av">👤</div><span>¿Quién eres?</span>`;
 }
 function render(){
   document.querySelectorAll('nav.tabs button').forEach(b=>b.classList.toggle('on',b.dataset.tab===S.tab));
@@ -617,6 +623,8 @@ function viewMatches(st){
   const pend=all.filter(m=>m.status!=='played'&&hoursTo(m)<=-3).sort((a,b)=>mdt(b)-mdt(a));
   const played=all.filter(m=>m.status==='played').sort((a,b)=>mdt(b)-mdt(a));
   let h='';
+  if(S.conn&&!S.conn.ok)h+=`<div class="banner" style="border-color:#ffd400;background:rgba(255,212,0,.1)"><span class="e">⚠️</span><span><b>Sin conexión con la base de datos</b><br><span class="small">${S.conn.code==='reglas'?'Las reglas de Firebase no dejan leer ni escribir. Revisa la pestaña Seguridad.':`Lo que hagas no se guardará (${esc(S.conn.code)}). Recarga en un rato.`}</span></span></div>`;
+  if(isAdmin())h+=`<button class="adminbar" data-act="goAdmin"><span style="font-size:22px">⚙️</span><span class="sp"><b>Eres admin</b><br><span class="small" style="opacity:.7">Panel: Gala, equipación, buzón y gestión</span></span><span>›</span></button>`;
   if(store?.mode==='demo')h+=`<div class="demo"><span>🧪 <b>Modo demo:</b> datos de prueba, solo en este móvil.</span><button class="btn sm" data-act="resetDemo">Reiniciar</button></div>`;
   if(me&&P(me)){
     up.forEach(m=>{const pr=m.promoted;if(pr&&pr.pid===me&&lineup(m).in.includes(me))h+=`<button class="banner wht" style="width:100%;text-align:left" data-act="open" data-id="${esc(m.id)}"><span class="e">⬆️</span><span><b>¡Entras en la lista del ${esc(fmtShort(m))}!</b><br>Alguien se ha bajado y has subido de la reserva.</span></button>`});
@@ -807,8 +815,8 @@ function seasonView(stAll){
   return h;
 }
 function viewRanking(st){
-  const rk=S.rk||'month';
-  return `<div class="seg"><button class="${rk==='month'?'on':''}" data-act="rk" data-v="month">Mes</button><button class="${rk==='season'?'on':''}" data-act="rk" data-v="season">Temporada</button><button class="${rk==='gala'?'on':''}" data-act="rk" data-v="gala">🏆 Gala</button></div>`+(rk==='season'?seasonView(st):rk==='gala'?galaView(st):monthView(st));
+  const rk=(S.rk==='gala'&&!galaOn()&&!isAdmin())?'month':(S.rk||'month');
+  return `<div class="seg"><button class="${rk==='month'?'on':''}" data-act="rk" data-v="month">Mes</button><button class="${rk==='season'?'on':''}" data-act="rk" data-v="season">Temporada</button>${galaOn()||isAdmin()?`<button class="${rk==='gala'?'on':''}" data-act="rk" data-v="gala">🏆 Gala${galaOn()?'':' 🔒'}</button>`:''}</div>`+(rk==='season'?seasonView(st):rk==='gala'?galaView(st):monthView(st));
 }
 
 /* ---- Plantilla ---- */
@@ -847,7 +855,7 @@ function viewInfo(){
     <li>El buen fútbol no es bienvenido. 😄</li></ul></div>`;
   h+=`<h2>Puntos fantasy</h2><div class="box small" style="line-height:1.8">Jugar <b>+${PTS.play}</b> · Ganar <b>+${PTS.win}</b> · Empatar <b>+${PTS.draw}</b> · Gol <b>+${PTS.goal}</b> · Asistencia <b>+${PTS.assist}</b> · ${AWARDS.map(A=>`${A.e} <b>${A.pts>0?'+':''}${A.pts}</b>`).join(' · ')} · Estrellas: <b>(media − 3) × 2</b> · 🟨 <b>${PTS.yellow}</b> · 🟥 <b>${PTS.red}</b></div>`;
   h+=`<h2>Nivel ⚡</h2><div class="box small" style="line-height:1.6">Como en Playtomic. Al registrarte te pones de 1 a 5 ★ según el nivel que crees que tienes. Después:<ul class="rules" style="margin-top:6px"><li><b>Ganar sube, perder baja.</b> Ganar a un equipo de más nivel sube más, y perder contra uno peor baja más.</li><li>Las goleadas cuentan un poco más.</li><li>Las estrellas que te ponen tus compañeros también empujan un poco.</li><li>En tus primeros ${LV.NEW_MATCHES} partidos el nivel se mueve más rápido, hasta que encuentra el tuyo.</li></ul>La fiabilidad llega al 100% a los ${LV.FULL} partidos.</div>`;
-  if(isAdmin())h+=`<h2>Ajustes de admin</h2><div class="box"><div class="row"><span class="sp"><b>👕 Equipación oficial</b><br><span class="small muted">Diseño de las camisetas, pedido conjunto, dorsales y +1 punto por venir equipado. ${kitOn()?'Ahora la ve todo el grupo.':'Ahora está oculta para todos.'}</span></span><button class="tog ${kitOn()?'on':''}" data-act="kitToggle">${kitOn()?'Activada':'Oculta'}</button></div></div>`;
+  if(isAdmin())h+=adminSection();
   h+=`<h2>Campos <span class="sub">📍 Jerez</span></h2><div class="box" style="padding:2px 16px">`;
   VENUES.forEach(v=>{h+=`<div class="venue"><div><b>${esc(v.n)}</b><div class="muted small">${esc(v.f)}</div></div><a href="tel:${v.p.replace(/\s/g,'')}">${esc(v.p)}</a></div>`});
   h+=`</div>`;
@@ -939,7 +947,7 @@ function playerForm(id,asMe){
       try{
         const upd={name,pos,emoji:emo,level0:lv,photo:photo||null};if(pin)upd.pinHash=await hashPin(pin);
         if(id)await store.doc('players/'+id).update(upd);
-        else{const nidv=nid();const first=!Object.keys(S.players).length;
+        else{const nidv=nid();const first=!Object.keys(S.players).length&&(store.mode==='demo'||S.conn?.ok);
           await store.doc('players/'+nidv).set({...upd,yellow:0,red:0,cardLog:[],admin:first,createdAt:Date.now()});
           if(asMe)setMe(nidv)}
         close();toast(id?'Guardado':'¡Fichaje cerrado! 🖊️');
@@ -1481,7 +1489,8 @@ function galaView(st){
   const y=S.season,label=seasonLabel(y);
   const stS=computeStats(m=>seasonOf(m)===y);enrich(stS);
   const ids=Object.keys(stS).filter(id=>stS[id].pj>0);
-  let h=`<div class="monthnav"><button class="iconbtn" data-act="season" data-d="-1">‹</button><div class="t">Gala ${label}</div><button class="iconbtn" data-act="season" data-d="1">›</button></div>`;
+  let h=galaOn()?'':`<div class="banner"><span class="e">🔒</span><span><b>Oculta para el grupo</b><br><span class="small">Solo la ven los admins. Actívala en el Panel de admin cuando llegue el momento.</span></span></div>`;
+  h+=`<div class="monthnav"><button class="iconbtn" data-act="season" data-d="-1">‹</button><div class="t">Gala ${label}</div><button class="iconbtn" data-act="season" data-d="1">›</button></div>`;
   h+=`<div class="gala-hero"><div class="tro">🏆</div><div><b>Gala de la temporada</b><br><span class="muted small">Premios por números + votación anónima del Balón de Oro y el Balón de Plomo.</span></div></div>`;
   if(me&&ids.includes(me))h+=`<button class="btn pri full" style="margin-top:12px" data-act="wrapped" data-id="${esc(me)}">🎬 Ver mi temporada ${label}</button>`;
   if(!ids.length)return h+`<div class="empty" style="margin-top:12px"><div class="big">🎬</div>Aún no hay partidos esta temporada.</div>`;
@@ -1740,6 +1749,22 @@ async function imgWrapped(pid){
   return c;
 }
 
+/* ============ ADMIN ============ */
+function adminSection(){
+  const row=(e,t,d,on,act)=>`<div class="row" style="padding:10px 0;border-bottom:1px solid var(--line)"><span class="sp"><b>${e} ${t}</b><br><span class="small muted">${d}</span></span><button class="tog ${on?'on':''}" data-act="${act}">${on?'Activada':'Oculta'}</button></div>`;
+  const nfb=Object.keys(S.feedback).length;const admins=Object.values(S.players).filter(p=>p.admin).map(p=>p.name);
+  return `<h2 id="admin" style="scroll-margin-top:90px">Panel de admin</h2><div class="box" style="padding:6px 16px 14px">
+    ${row('🏆','Gala de la temporada','Premios de la temporada y votación del Balón de Oro y el de Plomo.',galaOn(),'galaToggle')}
+    ${row('👕','Equipación oficial','Diseño de las camisetas, pedido conjunto, dorsales y +1 por venir equipado.',kitOn(),'kitToggle')}
+    <div style="padding-top:12px" class="small muted">
+      <p>👥 <b style="color:var(--txt)">Admins:</b> ${admins.map(esc).join(', ')||'—'}</p>
+      <p style="margin-top:6px">🃏 Toca a cualquier jugador para <b style="color:var(--txt)">nombrarlo admin, quitar tarjetas, resetear su PIN o borrarlo</b>.</p>
+      <p style="margin-top:6px">🗑 En la ficha de cualquier partido puedes <b style="color:var(--txt)">borrarlo o editarlo</b>.</p>
+      <p style="margin-top:6px">💬 Buzón beta: <b style="color:var(--txt)">${nfb} ${nfb===1?'sugerencia':'sugerencias'}</b> (más abajo).</p>
+      <p style="margin-top:6px">🔌 Conexión: ${store?.mode==='demo'?'modo demo':S.conn?.ok?`<b style="color:#4ade80">OK</b> · base de datos ${esc(S.conn.db)}`:`<b style="color:#ffd400">fallo (${esc(S.conn?.code||'?')})</b>`}</p>
+    </div></div>`;
+}
+
 /* ============ EQUIPACIÓN ============ */
 function shirtSVG(c,o={}){
   const s=o.size||80,w=c==='w',fill=w?'#ffffff':'#0d0d0d',stroke=w?'#d5d5d5':'#ffffff',txt=w?'#0a0a0a':'#ffffff';
@@ -1847,6 +1872,8 @@ document.addEventListener('click',e=>{
     case'pollClose':confirmBox('Cerrar encuesta','Desaparecerá de la portada.','Cerrar',async()=>{await store.doc('polls/'+id).update({closed:true})});break;
     case'cal':calModal(id);break;
     case'wrapped':openWrapped(id,a.closest('.md')?seasonOfDate(new Date()):S.season);break;
+    case'goAdmin':S.tab='info';render();setTimeout(()=>document.getElementById('admin')?.scrollIntoView({behavior:'smooth'}),50);break;
+    case'galaToggle':confirmBox(galaOn()?'Ocultar la Gala':'Activar la Gala',galaOn()?'La pestaña Gala dejará de verse para el grupo. Los votos se guardan.':'Todo el grupo verá la pestaña Gala en Ranking y podrá votar el Balón de Oro y el de Plomo.',galaOn()?'Ocultar':'🏆 Activar',async()=>{await store.doc('config/app').set({...(S.config.app||{}),gala:!galaOn()})});break;
     case'kitToggle':confirmBox(kitOn()?'Ocultar equipación':'Activar equipación',kitOn()?'Dejará de verse para todo el grupo. Los pedidos y dorsales se guardan.':'Todo el grupo verá el diseño de las camisetas, el pedido conjunto y el +1 punto por venir equipado.',kitOn()?'Ocultar':'👕 Activar',async()=>{await store.doc('config/app').set({...(S.config.app||{}),kit:!kitOn()})});break;
     case'kitHide':S.kitPromoHidden=true;try{localStorage.setItem('fifa07_kithide','1')}catch(e){};render();break;
     case'kitCopy':copyText(kitOrderText(),'Pedido copiado 📋');break;
@@ -1858,13 +1885,26 @@ document.addEventListener('click',e=>{
 });
 
 /* ============ DATOS ============ */
+// Conexión con Firebase: prueba la base de datos "(default)" y, si no existe, la llamada "default".
+// Cada escritura tiene un límite de 12 s para que la app nunca se quede "pillada".
+const withTimeout=(p,ms=12000)=>Promise.race([p,new Promise((_,rej)=>setTimeout(()=>rej({code:'timeout',message:'sin respuesta del servidor'}),ms))]);
 async function firebaseStore(cfg){
   const V='10.12.2';
   const app=await import(`https://www.gstatic.com/firebasejs/${V}/firebase-app.js`);
   const fs=await import(`https://www.gstatic.com/firebasejs/${V}/firebase-firestore.js`);
-  const fdb=fs.initializeFirestore(app.initializeApp(cfg),{ignoreUndefinedProperties:true});
+  const fb=app.initializeApp(cfg);
+  const cands=FIREBASE_DB?[FIREBASE_DB]:['(default)','default'];
+  // Se prueban las dos a la vez y se usa la primera que responda (un "permiso denegado" también indica que existe).
+  const probes=cands.map(id=>{const d=id==='(default)'?fs.initializeFirestore(fb,{ignoreUndefinedProperties:true}):fs.initializeFirestore(fb,{ignoreUndefinedProperties:true},id);
+    return withTimeout(fs.getDocFromServer(fs.doc(d,'config','ping')),10000).then(()=>({d,id,ok:true}),e=>({d,id,ok:false,code:e?.code||'error'}))});
+  let fdb=null,diag={ok:false,code:'',db:''};
+  const results=await new Promise(res=>{const out=[];probes.forEach(p=>p.then(r=>{out.push(r);if(r.ok||r.code==='permission-denied'||out.length===probes.length)res(out)}))});
+  const good=results.find(r=>r.ok)||results.find(r=>r.code==='permission-denied');
+  if(good){fdb=good.d;diag={ok:good.ok,code:good.ok?'':'reglas',db:good.id}}
+  else{const r=results.find(x=>x.id==='(default)')||results[0];fdb=r.d;diag={ok:false,code:results.map(x=>x.code).join('/'),db:''}}
+  S.conn=diag;
   return{mode:'live',
-    doc:p=>{const r=fs.doc(fdb,p);return{set:d=>fs.setDoc(r,d),update:d=>fs.updateDoc(r,d),delete:()=>fs.deleteDoc(r)}},
+    doc:p=>{const r=fs.doc(fdb,p);return{set:d=>withTimeout(fs.setDoc(r,d)),update:d=>withTimeout(fs.updateDoc(r,d)),delete:()=>withTimeout(fs.deleteDoc(r))}},
     collection:c=>({onSnapshot:(cb,er)=>fs.onSnapshot(fs.collection(fdb,c),s=>cb({docs:s.docs.map(d=>({id:d.id,data:()=>d.data()})),fromCache:s.metadata.fromCache}),er)})};
 }
 function demoStore(){
